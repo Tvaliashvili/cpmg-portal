@@ -546,10 +546,37 @@ function AddMilestoneModal({onClose,onAdd}){
 
 // ─── ADD DOCUMENT MODAL ───────────────────────────────────────────────────────
 function AddDocumentModal({onClose,onAdd,uploaderName}){
-  const [f,setF]=useState({title:"",description:"",docType:"BOQ",version:"v1.0",fileSize:"",urgent:false});
+  const [f,setF]=useState({title:"",description:"",docType:"BOQ",urgent:false});
+  const [file,setFile]=useState(null);
   const [err,setErr]=useState({});
   const set=(k,v)=>{setF(p=>({...p,[k]:v}));setErr(p=>({...p,[k]:""}));};
-  const submit=()=>{const e={};if(!f.title.trim())e.title="Required";if(Object.keys(e).length){setErr(e);return;}onAdd({id:genId(),type:"document",date:todayISO(),uploadedBy:uploaderName,...f,title:f.title.trim(),description:f.description.trim(),fileSize:f.fileSize.trim()||"—"});onClose();};
+
+  const handleFile=e=>{
+    const picked=e.target.files[0];
+    if(!picked) return;
+    setFile(picked);
+    if(!f.title.trim()){
+      const name=picked.name.replace(/\.[^/.]+$/,"").replace(/[_-]/g," ");
+      set("title",name.charAt(0).toUpperCase()+name.slice(1));
+    }
+  };
+
+  const fmtSize=bytes=>{
+    if(bytes<1024) return bytes+"B";
+    if(bytes<1024*1024) return (bytes/1024).toFixed(1)+"KB";
+    return (bytes/(1024*1024)).toFixed(1)+" MB";
+  };
+
+  const submit=()=>{
+    const e={};
+    if(!f.title.trim())e.title="Required";
+    if(Object.keys(e).length){setErr(e);return;}
+    onAdd({id:genId(),type:"document",date:todayISO(),uploadedBy:uploaderName,
+      ...f,title:f.title.trim(),description:f.description.trim(),
+      fileName:file?.name||null,fileSize:file?fmtSize(file.size):"—"});
+    onClose();
+  };
+
   return(
     <Modal title="Add Document" onClose={onClose}>
       <div className="space-y-4">
@@ -562,14 +589,42 @@ function AddDocumentModal({onClose,onAdd,uploaderName}){
             })}
           </div>
         </Field>
-        <Field label="Title" required error={err.title}><input className={inputCls} placeholder="e.g. Structural BOQ – Phase 1" value={f.title} onChange={e=>set("title",e.target.value)}/></Field>
-        <Field label="Description"><textarea className={inputCls} rows={2} style={{resize:"none"}} value={f.description} onChange={e=>set("description",e.target.value)}/></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Version"><input className={inputCls} placeholder="v1.0" value={f.version} onChange={e=>set("version",e.target.value)}/></Field>
-          <Field label="File Size"><input className={inputCls} placeholder="4.2 MB" value={f.fileSize} onChange={e=>set("fileSize",e.target.value)}/></Field>
-        </div>
+
+        <Field label="Upload File">
+          <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${file?"border-emerald-500/40 bg-emerald-500/5":"border-slate-600 bg-slate-800/40 hover:border-slate-500 hover:bg-slate-800/60"}`}>
+            <input type="file" className="hidden" onChange={handleFile} accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.dwg,.zip"/>
+            {file?(
+              <>
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/20 flex items-center justify-center shrink-0"><Icon name="file-check" size={18} className="text-emerald-400"/></div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-emerald-300 truncate">{file.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{fmtSize(file.size)}</div>
+                </div>
+                <span onClick={e=>{e.preventDefault();setFile(null);}} className="text-slate-500 hover:text-red-400 text-xs px-1 cursor-pointer">✕</span>
+              </>
+            ):(
+              <>
+                <div className="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center shrink-0"><Icon name="upload" size={18} className="text-slate-400"/></div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-300">Click to upload a file</div>
+                  <div className="text-xs text-slate-500 mt-0.5">PDF, Word, Excel, DWG, Images, ZIP</div>
+                </div>
+              </>
+            )}
+          </label>
+        </Field>
+
+        <Field label="Title" required error={err.title}>
+          <input className={inputCls} placeholder="e.g. Structural BOQ – Phase 1" value={f.title} onChange={e=>set("title",e.target.value)}/>
+        </Field>
+        <Field label="Description">
+          <textarea className={inputCls} rows={2} style={{resize:"none"}} value={f.description} onChange={e=>set("description",e.target.value)}/>
+        </Field>
         <Toggle value={f.urgent} onChange={v=>set("urgent",v)} label={<span>Mark as <span className="text-red-400">Urgent</span></span>}/>
-        <div className="flex gap-2"><button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-slate-700 text-slate-300 text-sm font-semibold hover:bg-slate-600">Cancel</button><button onClick={submit} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-500 flex items-center justify-center gap-2"><Icon name="file-plus" size={14}/>Add Document</button></div>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-slate-700 text-slate-300 text-sm font-semibold hover:bg-slate-600">Cancel</button>
+          <button onClick={submit} className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-500 flex items-center justify-center gap-2"><Icon name="file-plus" size={14}/>Add Document</button>
+        </div>
       </div>
     </Modal>
   );
@@ -644,7 +699,10 @@ function DocumentCard({entry,role,onDelete,isLocked}){
             </div>
             <h4 className="font-semibold text-slate-100 text-sm leading-tight mb-1">{entry.title}</h4>
             {entry.description&&<p className="text-xs text-slate-400 leading-relaxed">{entry.description}</p>}
-            {entry.uploadedBy&&<div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500"><Icon name="hard-hat" size={10}/>{entry.uploadedBy}</div>}
+            <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
+              {entry.fileName&&<span className="flex items-center gap-1"><Icon name="paperclip" size={10}/>{entry.fileName}</span>}
+              {entry.uploadedBy&&<span className="flex items-center gap-1"><Icon name="hard-hat" size={10}/>{entry.uploadedBy}</span>}
+            </div>
           </div>
         </div>
         <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between flex-wrap gap-2">
