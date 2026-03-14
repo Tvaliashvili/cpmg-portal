@@ -239,7 +239,7 @@ function NewProjectModal({onClose,onCreate,activePMs,activeClients}){
       location:f.location.trim()||"TBD",budget,
       completion:f.status==="finished"?100:f.status==="active"?5:0,
       startDate:f.startDate||now,endDate:f.endDate||"",
-      timeline:[{id:genId(),type:"message",date:now,author:"CPMG Director",msgRole:"Administrator",
+      timeline:[{id:genId(),type:"message",date:now,author:"Saulius Mikaliunas",msgRole:"Administrator",
         content:`Project "${f.name.trim()}" created. Assigned PM(s): ${pmNames}. Client(s): ${clientNames}. Budget: ${budget}. Status: ${f.status}.`,
         urgent:false,isSystem:true}]
     };
@@ -378,6 +378,150 @@ function NewProjectModal({onClose,onCreate,activePMs,activeClients}){
   );
 }
 
+// ─── EDIT PROJECT MODAL ───────────────────────────────────────────────────────
+function EditProjectModal({onClose,onSave,project,activePMs,activeClients}){
+  const toggleArr=(arr,id)=>arr.includes(id)?arr.filter(x=>x!==id):[...arr,id];
+  const initPMIds = project.assignedPMIds||[project.assignedPM].filter(Boolean);
+  const initClientIds = project.clientIds||[];
+
+  const [f,setF]=useState({
+    name:       project.name,
+    budget:     project.budget,
+    status:     project.status,
+    location:   project.location||"",
+    startDate:  project.startDate||"",
+    endDate:    project.endDate||"",
+    assignedPMIds: initPMIds,
+    clientIds:  initClientIds,
+  });
+  const [err,setErr]=useState({});
+  const [pmOpen,setPmOpen]=useState(false);
+  const [clientOpen,setClientOpen]=useState(false);
+  const set=(k,v)=>{setF(p=>({...p,[k]:v}));setErr(p=>({...p,[k]:""}));};
+
+  const validate=()=>{
+    const e={};
+    if(!f.name.trim())e.name="Required";
+    if(!f.budget.trim())e.budget="Required";
+    if(!f.assignedPMIds.length)e.pm="Assign at least one PM";
+    return e;
+  };
+
+  const submit=()=>{
+    const e=validate();if(Object.keys(e).length){setErr(e);return;}
+    const pmNames=f.assignedPMIds.map(id=>activePMs.find(p=>p.id===id)?.name||"").filter(Boolean).join(", ");
+    const clientNames=f.clientIds.map(id=>activeClients.find(c=>c.id===id)?.company||activeClients.find(c=>c.id===id)?.name||"").filter(Boolean).join(", ");
+    const budget=f.budget.trim().startsWith("$")?f.budget.trim():`$${f.budget.trim()}`;
+    onSave({
+      ...project,
+      name:f.name.trim(), budget, status:f.status,
+      location:f.location.trim()||"TBD",
+      startDate:f.startDate, endDate:f.endDate,
+      assignedPM:f.assignedPMIds[0],
+      assignedPMIds:f.assignedPMIds,
+      clientIds:f.clientIds,
+      client: clientNames||project.client,
+    });
+    onClose();
+  };
+
+  const selPMs=activePMs.filter(p=>f.assignedPMIds.includes(p.id));
+  const selClients=activeClients.filter(c=>f.clientIds.includes(c.id));
+
+  // Reusable multi-select dropdown
+  const MultiSelect=({label,items,selIds,onToggle,open,setOpen,placeholder,err:fieldErr})=>(
+    <Field label={label} error={fieldErr}>
+      <button type="button" onClick={()=>setOpen(p=>!p)}
+        className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${open?"border-blue-500/50 bg-slate-800":"border-slate-600 bg-slate-800/50 hover:border-slate-500"}`}>
+        <div className="flex-1 min-w-0">
+          {selIds.length===0
+            ? <span className="text-sm text-slate-500">{placeholder}</span>
+            : <div className="flex items-center gap-1.5 flex-wrap">
+                {items.filter(x=>selIds.includes(x.id)).map(x=>(
+                  <span key={x.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/25">
+                    {x.name}
+                    <span onClick={e=>{e.stopPropagation();onToggle(x.id);}} className="ml-0.5 hover:text-white cursor-pointer">×</span>
+                  </span>
+                ))}
+              </div>
+          }
+        </div>
+        <Icon name={open?"chevron-up":"chevron-down"} size={14} className="text-slate-500 shrink-0"/>
+      </button>
+      {open&&(
+        <div className="mt-1.5 rounded-xl border border-slate-700 bg-slate-800/80 overflow-hidden">
+          {items.map((item,i)=>{
+            const sel=selIds.includes(item.id);
+            return(
+              <button key={item.id} type="button" onClick={()=>onToggle(item.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${i>0?"border-t border-slate-700/60":""} ${sel?"bg-blue-500/10":"hover:bg-slate-700/60"}`}>
+                <Av initials={item.avatar} size="sm"/>
+                <div className="flex-1 min-w-0">
+                  <div className={`text-xs font-semibold truncate ${sel?"text-blue-300":"text-slate-300"}`}>{item.name}</div>
+                  <div className="text-slate-500 truncate" style={{fontSize:10}}>{item.company||item.email}</div>
+                </div>
+                <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${sel?"bg-blue-500 border-blue-500":"border-slate-600"}`}>
+                  {sel&&<Icon name="check" size={10} className="text-white"/>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Field>
+  );
+
+  return(
+    <Modal title="Edit Project" subtitle="Update team assignment, status, budget or dates" onClose={onClose} wide>
+      <div className="space-y-4">
+        <Field label="Project Name" required error={err.name}>
+          <input className={inputCls} value={f.name} onChange={e=>set("name",e.target.value)}/>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Budget" required error={err.budget}>
+            <input className={inputCls} value={f.budget} onChange={e=>set("budget",e.target.value)}/>
+          </Field>
+          <Field label="Status">
+            <select className={selectCls} value={f.status} onChange={e=>set("status",e.target.value)}>
+              <option value="starting">Starting</option>
+              <option value="active">Active</option>
+              <option value="finished">Finished</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Location">
+          <input className={inputCls} value={f.location} onChange={e=>set("location",e.target.value)}/>
+        </Field>
+
+        <MultiSelect
+          label="Project Managers" items={activePMs} selIds={f.assignedPMIds}
+          onToggle={id=>set("assignedPMIds",toggleArr(f.assignedPMIds,id))}
+          open={pmOpen} setOpen={setPmOpen}
+          placeholder="Select project managers…" err={err.pm}
+        />
+        <MultiSelect
+          label="Clients" items={activeClients} selIds={f.clientIds}
+          onToggle={id=>set("clientIds",toggleArr(f.clientIds,id))}
+          open={clientOpen} setOpen={setClientOpen}
+          placeholder="Select clients…"
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Start Date"><input type="date" className={inputCls} value={f.startDate} onChange={e=>set("startDate",e.target.value)} style={{colorScheme:"dark"}}/></Field>
+          <Field label="End Date"><input type="date" className={inputCls} value={f.endDate} onChange={e=>set("endDate",e.target.value)} style={{colorScheme:"dark"}}/></Field>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm font-semibold">Cancel</button>
+          <button onClick={submit} className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2" style={{background:"var(--brand-red)"}}>
+            <Icon name="save" size={15}/>Save Changes
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── ADD MILESTONE MODAL ──────────────────────────────────────────────────────
 function AddMilestoneModal({onClose,onAdd}){
   const [f,setF]=useState({title:"",description:"",date:todayISO(),status:"upcoming",urgent:false});
@@ -500,11 +644,7 @@ function DocumentCard({entry,role,onDelete,isLocked}){
             </div>
             <h4 className="font-semibold text-slate-100 text-sm leading-tight mb-1">{entry.title}</h4>
             {entry.description&&<p className="text-xs text-slate-400 leading-relaxed">{entry.description}</p>}
-            <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 flex-wrap">
-              {entry.version&&<span className="flex items-center gap-1"><Icon name="layers" size={10}/>{entry.version}</span>}
-              {entry.fileSize&&entry.fileSize!=="—"&&<span className="flex items-center gap-1"><Icon name="archive" size={10}/>{entry.fileSize}</span>}
-              {entry.uploadedBy&&<span className="flex items-center gap-1"><Icon name="hard-hat" size={10}/>{entry.uploadedBy}</span>}
-            </div>
+            {entry.uploadedBy&&<div className="flex items-center gap-1 mt-1.5 text-xs text-slate-500"><Icon name="hard-hat" size={10}/>{entry.uploadedBy}</div>}
           </div>
         </div>
         <div className="mt-4 pt-3 border-t border-slate-700/50 flex items-center justify-between flex-wrap gap-2">
@@ -571,16 +711,17 @@ function TimelineEntry({entry,role,onDelete,onToggleMilestone,isLocked}){
 }
 
 // ─── PROJECT DETAIL ───────────────────────────────────────────────────────────
-function ProjectDetail({project,role,teamPMs,onBack,onUpdateTimeline}){
+function ProjectDetail({project,role,teamPMs,activePMs,activeClients,onBack,onUpdateTimeline,onSaveProject}){
   const [timeline,setTimeline]=useState(project.timeline);
   const [showMsg,setShowMsg]=useState(false);
   const [showMilestone,setShowMilestone]=useState(false);
   const [showDocument,setShowDocument]=useState(false);
+  const [showEdit,setShowEdit]=useState(false);
   const [msgText,setMsgText]=useState("");
   const [justCompleted,setJustCompleted]=useState(null); // id of last milestone marked complete
   const assignedPM=teamPMs.find(p=>p.id===project.assignedPM);
   const st=STATUS_CFG[project.status]||STATUS_CFG.active;
-  const uploaderName=role===ROLES.BOSS?"CPMG Director":role===ROLES.PM?(assignedPM?.name||"PM"):"Client";
+  const uploaderName=role===ROLES.BOSS?"Saulius Mikaliunas":role===ROLES.PM?(assignedPM?.name||"PM"):"Client";
   const isFinished=project.status==="finished";
   const isLocked=isFinished&&role!==ROLES.BOSS;
 
@@ -634,6 +775,7 @@ function ProjectDetail({project,role,teamPMs,onBack,onUpdateTimeline}){
     <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
       {showMilestone&&<AddMilestoneModal onClose={()=>setShowMilestone(false)} onAdd={add}/>}
       {showDocument &&<AddDocumentModal  onClose={()=>setShowDocument(false)}  onAdd={add} uploaderName={uploaderName}/>}
+      {showEdit&&role===ROLES.BOSS&&<EditProjectModal onClose={()=>setShowEdit(false)} onSave={onSaveProject} project={project} activePMs={activePMs} activeClients={activeClients}/>}
 
       {/* Auto-complete toast */}
       {justCompleted&&(
@@ -654,19 +796,42 @@ function ProjectDetail({project,role,teamPMs,onBack,onUpdateTimeline}){
                 <h2 className="text-base sm:text-lg font-bold text-slate-100 truncate">{project.name}</h2>
                 <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${st.bg} ${st.color} ${st.border}`}><span className={`w-1.5 h-1.5 rounded-full ${st.dot}`}/>{st.label}</span>
                 {isFinished&&<span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border bg-slate-500/10 text-slate-400 border-slate-500/30"><Icon name="lock" size={9}/>Read Only</span>}
+                {role===ROLES.BOSS&&<button onClick={()=>setShowEdit(true)} className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold bg-slate-700/80 text-slate-400 hover:bg-slate-700 hover:text-slate-200 border border-slate-600 transition-colors"><Icon name="edit-2" size={10}/>Edit</button>}
               </div>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="text-xs text-slate-500">{project.client} · {project.location}</span>
-                {/* PM inline */}
-                {assignedPM&&(
-                  <div className="flex items-center gap-1.5">
-                    <Av initials={assignedPM.avatar} size="sm"/>
-                    <span className="text-xs text-slate-400 font-medium">{assignedPM.name}</span>
-                    <span className="text-xs text-slate-600">· PM</span>
-                  </div>
-                )}
                 {project.startDate&&<span className="text-xs text-slate-600">{fmtDate(project.startDate)} → {project.endDate?fmtDate(project.endDate):"TBD"}</span>}
               </div>
+              {/* Participants: all PMs + all clients */}
+              {(()=>{
+                const pmIds=project.assignedPMIds||[project.assignedPM].filter(Boolean);
+                const clIds=project.clientIds||[];
+                const pmList=teamPMs.filter(p=>pmIds.includes(p.id));
+                const clList=activeClients.filter(c=>clIds.includes(c.id));
+                if(!pmList.length&&!clList.length) return null;
+                return(
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {pmList.map(pm=>(
+                      <div key={pm.id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20">
+                        <Av initials={pm.avatar} size="sm"/>
+                        <div>
+                          <div className="text-xs font-semibold text-sky-300 leading-none">{pm.name}</div>
+                          <div className="text-sky-600 leading-none mt-0.5" style={{fontSize:9}}>Project Manager</div>
+                        </div>
+                      </div>
+                    ))}
+                    {clList.map(cl=>(
+                      <div key={cl.id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                        <Av initials={cl.avatar} size="sm"/>
+                        <div>
+                          <div className="text-xs font-semibold text-emerald-300 leading-none">{cl.name}</div>
+                          <div className="text-emerald-700 leading-none mt-0.5" style={{fontSize:9}}>Client</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -778,8 +943,6 @@ function ProjectDetail({project,role,teamPMs,onBack,onUpdateTimeline}){
 // ─── PROJECT CARD ─────────────────────────────────────────────────────────────
 function ProjectCard({project,role,teamPMs,onSelect,onAssignPM,onChangeStatus}){
   const st=STATUS_CFG[project.status]||STATUS_CFG.active;
-  const pm=teamPMs.find(p=>p.id===project.assignedPM);
-  const [pmDrop,setPmDrop]=useState(false);
   const [stDrop,setStDrop]=useState(false);
   const topBar=project.status==="active"?"bg-gradient-to-r from-emerald-500 to-teal-500":project.status==="starting"?"bg-gradient-to-r from-amber-500 to-orange-500":"bg-slate-700";
   return(
@@ -819,26 +982,6 @@ function ProjectCard({project,role,teamPMs,onSelect,onAssignPM,onChangeStatus}){
           <ProgressBar value={project.completion} color={project.status==="finished"?"bg-slate-500":"bg-emerald-500"}/>
           {project.timeline&&(()=>{const ms=project.timeline.filter(e=>e.type==="milestone"&&!e.isSystem);const done=ms.filter(e=>e.status==="complete").length;return ms.length>0&&<div className="text-xs text-slate-600 mt-1">{done}/{ms.length} phases complete</div>})()}
         </div>
-        {role===ROLES.BOSS?(
-          <div className="relative mb-3">
-            <button onClick={()=>setPmDrop(!pmDrop)} className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-700/60 border border-slate-600 hover:border-slate-500 text-xs transition-colors">
-              <div className="flex items-center gap-2">{pm?<Av initials={pm.avatar} size="sm"/>:<div className="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center"><Icon name="user-plus" size={10} className="text-slate-400"/></div>}<span className={pm?"text-slate-200 font-medium":"text-slate-500"}>{pm?.name||"Assign PM"}</span></div>
-              <Icon name="chevron-down" size={12} className="text-slate-400"/>
-            </button>
-            {pmDrop&&(
-              <div className="absolute bottom-full left-0 right-0 mb-1 bg-slate-800 border border-slate-600 rounded-xl overflow-hidden shadow-2xl" style={{zIndex:40}}>
-                {teamPMs.map(p=>(
-                  <button key={p.id} onClick={()=>{onAssignPM(project.id,p.id);setPmDrop(false);}} className={`w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-xs transition-colors ${project.assignedPM===p.id?"bg-slate-700/60":""}`}>
-                    <Av initials={p.avatar} size="sm"/><div className="flex-1 text-left"><div className="font-medium text-slate-200">{p.name}</div><div className="text-slate-500">{p.email}</div></div>
-                    {project.assignedPM===p.id&&<Icon name="check" size={12} className="text-emerald-400"/>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ):pm?(
-          <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-slate-700/40"><Av initials={pm.avatar} size="sm"/><div><div className="text-xs text-slate-500">Assigned PM</div><div className="text-xs font-semibold text-slate-200">{pm.name}</div></div></div>
-        ):null}
         <button onClick={()=>onSelect(project)} className="w-full py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/20 text-blue-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors">View Timeline<Icon name="chevron-right" size={12}/></button>
       </div>
     </div>
@@ -1121,6 +1264,7 @@ function App(){
   const assignPM=(pid,pmid)=>setProjects(p=>p.map(x=>x.id===pid?{...x,assignedPM:pmid}:x));
   const changeStatus=(pid,status)=>setProjects(p=>p.map(x=>x.id===pid?{...x,status,completion:status==="finished"?100:calcCompletion(x.timeline)}:x));
   const createProj=proj=>{setProjects(p=>[proj,...p]);setSelProj(proj);};
+  const saveProj=proj=>{setProjects(p=>p.map(x=>x.id===proj.id?proj:x));setSelProj(proj);};
   const updateTimeline=(pid,timeline,completion,status)=>setProjects(p=>p.map(x=>x.id===pid?{...x,timeline,completion,status}:x));
 
   useEffect(()=>{
@@ -1131,7 +1275,7 @@ function App(){
   },[showBell]);
 
   const navItems=[{id:"dashboard",label:"Dashboard",icon:"home"},...(role===ROLES.BOSS?[{id:"invites",label:"Invite Manager",icon:"key"},{id:"users",label:"Users",icon:"users"}]:[])];
-  const userMap={boss:{name:"CPMG Director",initials:"CD",title:"Site Director"},pm:{name:"Sarah Connors",initials:"SC",title:"Project Manager"},client:{name:"Apex Developments",initials:"AD",title:"Client Account"}};
+  const userMap={boss:{name:"Saulius Mikaliunas",initials:"SM",title:"Site Director"},pm:{name:"Sarah Connors",initials:"SC",title:"Project Manager"},client:{name:"Apex Developments",initials:"AD",title:"Client Account"}};
   const user=userMap[role];
   const liveProj=selProj?(projects.find(p=>p.id===selProj.id)||selProj):null;
 
@@ -1239,7 +1383,7 @@ function App(){
 
           {/* Page */}
           <div style={{flex:1,overflow:"hidden"}}>
-            {selProj?<ProjectDetail project={liveProj} role={role} teamPMs={activePMs} onBack={()=>setSelProj(null)} onUpdateTimeline={updateTimeline}/>
+            {selProj?<ProjectDetail project={liveProj} role={role} teamPMs={activePMs} activePMs={activePMs} activeClients={activeClients} onBack={()=>setSelProj(null)} onUpdateTimeline={updateTimeline} onSaveProject={saveProj}/>
             :nav==="invites"&&role===ROLES.BOSS?<InviteManager/>
             :nav==="users"&&role===ROLES.BOSS?<TeamView activePMs={activePMs} setActivePMs={setActivePMs} activeClients={activeClients} setActiveClients={setActiveClients} projects={projects}/>
             :<Dashboard projects={projects} role={role} teamPMs={activePMs} onSelect={p=>setSelProj(p)} onAssignPM={assignPM} onNew={()=>setShowNew(true)} onChangeStatus={changeStatus}/>}
