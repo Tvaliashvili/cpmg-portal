@@ -74,6 +74,7 @@ function Icon({name, size=16, className="", color="currentColor"}){
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const ROLES={BOSS:"boss",PM:"pm",CLIENT:"client"};
+async function sha256(str){const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");}
 const TEAM_PMS=[
   {id:"pm1",name:"Sandro Tvaliashvili",avatar:"ST",email:"sandro@buildco.com"},
   {id:"pm2",name:"Marcus Webb",  avatar:"MW",email:"marcus@buildco.com"},
@@ -1453,16 +1454,16 @@ function LoginScreen({onLogin,onGoSignup}){
   const [err,setErr]=useState("");
   const [show,setShow]=useState(false);
 
-  const submit=()=>{
+  const ACCOUNTS=[
+    {email:"sm@cpmgroup.ge", hash:"9be4afddaf14d914bc986e1c4e27f00541ad6abff3fc749ad52ed53978909f11", role:"boss",   user:{name:"Saulius Mikaliunas",  initials:"SM",title:"Site Director",    email:"sm@cpmgroup.ge"}},
+    {email:"st@cpmgroup.ge", hash:"c8d278bfad562d1ba62bad71d27c6fed5b8a70fe9d08cab6d0aac9836c31d9a9", role:"pm",     user:{name:"Sandro Tvaliashvili", initials:"ST",title:"Project Manager",   email:"st@cpmgroup.ge"}},
+    {email:"lt@cpmgroup.ge", hash:"7e79490385366b51939a401e03bdee9080477e0b80ea7a01669aa22149e3fd97", role:"client", user:{name:"Luka Tsilosani",      initials:"LT",title:"Client Account",    email:"lt@cpmgroup.ge",company:"Luka Tsilosani"}},
+  ];
+  const submit=async()=>{
     if(!email.trim()||!password.trim()){setErr("Please enter email and password.");return;}
     const e=email.trim().toLowerCase();
-    const p=password;
-    const ACCOUNTS=[
-      {email:"sm@cpmgroup.ge",  password:"***REMOVED***", role:"boss",   user:{name:"Saulius Mikaliunas",  initials:"SM",title:"Site Director",    email:"sm@cpmgroup.ge"}},
-      {email:"st@cpmgroup.ge",  password:"***REMOVED***", role:"pm",     user:{name:"Sandro Tvaliashvili", initials:"ST",title:"Project Manager",   email:"st@cpmgroup.ge"}},
-      {email:"lt@cpmgroup.ge",  password:"***REMOVED***", role:"client", user:{name:"Luka Tsilosani",      initials:"LT",title:"Client Account",    email:"lt@cpmgroup.ge",company:"Luka Tsilosani"}},
-    ];
-    const match=ACCOUNTS.find(a=>a.email===e&&a.password===p);
+    const h=await sha256(password);
+    const match=ACCOUNTS.find(a=>a.email===e&&a.hash===h);
     if(match){onLogin(match.role,match.user);return;}
     setErr("Invalid email or password.");
   };
